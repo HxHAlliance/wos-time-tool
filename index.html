@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>WOS Time Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Noto+Sans+JP:wght@400;500&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      background: linear-gradient(#0e1a2b, #1f3b5b);
+      color: #e8f4ff;
+      font-family: 'Noto Sans JP', sans-serif;
+      padding: 16px;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid #9cc7ff;
+      border-radius: 16px;
+      box-shadow: 0 0 20px #6bb6ff;
+      padding: 24px;
+      max-width: 100%;
+      margin: auto;
+    }
+
+    h2 {
+      text-align: center;
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 700;
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-top: 14px;
+      font-size: 18px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 18px;
+      margin: 10px 0 16px;
+      background: #1a2f45;
+      color: #e8f4ff;
+      border: 1px solid #9cc7ff;
+      border-radius: 14px;
+      font-size: 20px;
+      line-height: 1.6;
+      box-sizing: border-box;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    button {
+      width: 100%;
+      padding: 20px;
+      margin-top: 16px;
+      background: #4aa8ff;
+      border: none;
+      border-radius: 16px;
+      color: white;
+      font-size: 22px;
+      font-weight: 600;
+      box-shadow: 0 0 14px #4aa8ff;
+    }
+
+    #preview {
+      margin-bottom: 10px;
+      font-size: 20px;
+      color: #9cc7ff;
+      white-space: pre-line;
+      line-height: 1.6;
+    }
+
+    #utcPreview {
+      font-size: 16px;
+      color: #b0c4de;
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    #result {
+      margin-top: 24px;
+      font-size: 20px;
+      white-space: pre-line;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="panel">
+    <h2>WOS Time Tool</h2>
+
+    <div id="preview">完了予定：--</div>
+    <div id="utcPreview">UTC：--</div>
+
+    <label>タスク名テンプレ</label>
+    <select id="taskTemplate">
+      <option value="🏗 建築完了">🏗 建築完了</option>
+      <option value="🔬 研究完了">🔬 研究完了</option>
+      <option value="⛏ 採集完了">⛏ 採集完了</option>
+      <option value="🛡 訓練完了">🛡 訓練完了</option>
+      <option value="👑 役職就任">👑 役職就任</option>
+    </select>
+
+    <label>タスク名（任意で追記）</label>
+    <input id="taskTitle" type="text">
+
+    <label>日数</label>
+    <select id="days" onchange="updatePreview()"></select>
+
+    <label>時間</label>
+    <select id="hours" onchange="updatePreview()"></select>
+
+    <label>分</label>
+    <select id="minutes" onchange="updatePreview()"></select>
+
+    <label>通知タイミング</label>
+    <select id="notifyTime">
+      <option value="0">0分前</option>
+      <option value="1">1分前</option>
+      <option value="5">5分前</option>
+      <option value="10">10分前</option>
+      <option value="30">30分前</option>
+      <option value="60">1時間前</option>
+    </select>
+
+    <label>説明書き（自動生成・編集可能）</label>
+    <textarea id="description" rows="4"></textarea>
+
+    <button onclick="submitTask()">カレンダーに登録</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycby3-ufOyY4unqWEzOKD-XFb4_E88KAs0BQZW6RLjbVG-soEzz5SKHK8V8dvcBU6Zn-A7g/exec";
+    const API_KEY = "WOS-API-KEY-2026-K3";
+
+    window.onload = () => {
+      const daysSel = document.getElementById("days");
+      const hoursSel = document.getElementById("hours");
+      const minutesSel = document.getElementById("minutes");
+
+      for (let i = 0; i <= 7; i++) daysSel.innerHTML += `<option value="${i}">${i}日</option>`;
+      for (let i = 0; i < 24; i++) hoursSel.innerHTML += `<option value="${i}">${i}時間</option>`;
+      for (let i = 0; i < 60; i++) minutesSel.innerHTML += `<option value="${i}">${i}分</option>`;
+
+      updatePreview();
+    };
+
+    function updatePreview() {
+      const days = Number(document.getElementById("days").value);
+      const hours = Number(document.getElementById("hours").value);
+      const minutes = Number(document.getElementById("minutes").value);
+
+      const now = new Date();
+      const totalMinutes = days * 1440 + hours * 60 + minutes;
+      const target = new Date(now.getTime() + totalMinutes * 60000);
+
+      const diffH = Math.floor(totalMinutes / 60);
+      const diffM = totalMinutes % 60;
+
+      const jp =
+        `${target.getFullYear()}/${target.getMonth()+1}/${target.getDate()} ` +
+        `${String(target.getHours()).padStart(2,"0")}:${String(target.getMinutes()).padStart(2,"0")}`;
+
+      document.getElementById("preview").innerText =
+        `完了予定：${jp}（あと ${diffH}時間${diffM}分）\n分換算＝${totalMinutes}分`;
+
+      const utcStr =
+        `${target.getUTCFullYear()}/` +
+        `${String(target.getUTCMonth()+1).padStart(2,"0")}/` +
+        `${String(target.getUTCDate()).padStart(2,"0")} ` +
+        `${String(target.getUTCHours()).padStart(2,"0")}:` +
+        `${String(target.getUTCMinutes()).padStart(2,"0")}`;
+
+      document.getElementById("utcPreview").innerText = `UTC：${utcStr}`;
+
+      const startStr =
+        `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ` +
+        `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
+      const nowUtcStr =
+        `${now.getUTCFullYear()}/` +
+        `${String(now.getUTCMonth()+1).padStart(2,"0")}/` +
+        `${String(now.getUTCDate()).padStart(2,"0")} ` +
+        `${String(now.getUTCHours()).padStart(2,"0")}:` +
+        `${String(now.getUTCMinutes()).padStart(2,"0")}`;
+
+      const descText =
+`${startStr} から ${diffH}時間${diffM}分後 の
+${jp} になりました。
+分換算：${totalMinutes}分
+現在時刻はUTC：${nowUtcStr} です。`;
+
+      document.getElementById("description").value = descText;
+    }
+
+    async function submitTask() {
+      const result = document.getElementById("result");
+      result.innerText = "登録中…";
+
+      const data = {
+        apiKey: API_KEY,
+        title: document.getElementById("taskTemplate").value +
+               (document.getElementById("taskTitle").value.trim() ? "：" + document.getElementById("taskTitle").value.trim() : ""),
+        days: Number(document.getElementById("days").value),
+        hours: Number(document.getElementById("hours").value),
+        minutes: Number(document.getElementById("minutes").value),
+        notify: Number(document.getElementById("notifyTime").value),
+        desc: document.getElementById("description").value
+      };
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body: JSON.stringify(data)
+      });
+
+      const json = await res.json();
+
+      if (json.ok) {
+        result.style.color = "#9cc7ff";
+        result.innerText = "登録完了！";
+      } else {
+        result.style.color = "red";
+        result.innerText = "エラー：" + json.error;
+      }
+    }
+  </script>
+</body>
+</html>
